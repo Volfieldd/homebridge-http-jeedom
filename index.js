@@ -28,6 +28,11 @@ function HttpJeedomAccessory(log, config) {
   //HumidityService
   this.humidtyCommandID     = config["humidityCommandID"];
 
+  //ShutterService
+  this.upCommandID          = config["upCommandID"];
+  this.downCommandID         = config["downCommandID"];
+  this.stateCommandID       = config["stateCommandID"];
+
 }
 
 HttpJeedomAccessory.prototype = {
@@ -52,6 +57,59 @@ setUrl: function(cmdID) {
   return url;
 },
 
+//This function moves Up or Down a shutter device
+setShutterState: function(shutterUp, callback) {
+  var url;
+
+  if (!this.upCommandID || !this.downCommandID) {
+    this.log.warn("No command ID defined, please check config.json file");
+    callback(new Error("No command ID defined"));
+    return;
+  }
+
+  if (shutterUp) {
+    url = this.setUrl(this.upCommandID);
+  } else {
+    url = this.setUrl(this.downCommandID);
+  }
+
+  this.httpRequest(url, function(error, response, responseBody) {
+    if (error) {
+      this.log("HTTP set shutter up failed with error: %s", error.message);
+      callback(error);
+    } else {
+      this.log("HTTP rise shutter succeeded");
+      callback();
+    }
+  }.bind(this));
+},
+
+//This function get a shutter state
+getShutterState: function(callback) {
+  var url;
+
+  if (!this.stateCommandID) {
+    this.log.warn("No state command ID defined");
+    callback(new Error("No status command ID defined"));
+    return;
+  }
+
+  url = this.setUrl(this.stateCommandID);
+
+  this.httpRequest(url, function(error, response, responseBody) {
+    if (error) {
+      this.log("HTTP get shutter state function failed: %s", error.message);
+      callback(error);
+    } else {
+      var binaryState = parseInt(responseBody);
+      var shutterUp = binaryState > 0;
+      this.log("Shutter state is currently %s", binaryState);
+      callback(null, shutterUp);
+    }
+  }.bind(this));
+},
+
+
 //This function turns On or Off a switch device
 setPowerState: function(powerOn, callback) {
   var url;
@@ -67,7 +125,6 @@ setPowerState: function(powerOn, callback) {
   } else {
     url = this.setUrl(this.offCommandID);
   }
-
   this.httpRequest(url, function(error, response, responseBody) {
     if (error) {
       this.log("HTTP set power failed with error: %s", error.message);
@@ -167,9 +224,9 @@ getServices: function() {
   var informationService = new Service.AccessoryInformation();
 
   informationService
-  .setCharacteristic(Characteristic.Manufacturer, "HTTP Manufacturer")
-  .setCharacteristic(Characteristic.Model, "HTTP Model")
-  .setCharacteristic(Characteristic.SerialNumber, "HTTP Serial Number");
+  .setCharacteristic(Characteristic.Manufacturer, "Jeedom Box")
+  .setCharacteristic(Characteristic.Model, "Jeedom DIY API")
+  .setCharacteristic(Characteristic.SerialNumber, "Hell Yeah !");
 
   if (this.service == "SwitchService") {
     this.log("Defining a switch module");
@@ -200,7 +257,16 @@ getServices: function() {
     .on('get', this.getHumidity.bind(this));
 
     return [informationService, humidityService];
-  }
+  } else if (this.service == "ShutterService") {
+    var WindowCoveringService = new Service.WindowCovering(this.name);
+    
+    WindowCoveringService
+    .getCharacteristic(Characteristic.TargetPosition)
+    .on('get', this.getShutterState.bind(this))
+    .on('set', this.setShutterState.bind(this));
+
+    return [WindowCoveringService];
+ }
 
 }
 }
